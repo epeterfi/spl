@@ -1,0 +1,4 @@
+index="_internal" host=* source="*/metrics.log" group=per_sourcetype_thruput
+| eval gb=kb/1024/1024
+| stats sum(gb) AS total_gb, sum(ev) AS total_events by series
+| sort - total_gb
