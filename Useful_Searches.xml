@@ -1,0 +1,456 @@
+<form version="1.1" theme="dark">
+  <label>Useful Searches</label>
+  <fieldset submitButton="false" autoRun="false">
+    <input type="time" token="time1">
+      <label>time</label>
+      <default>
+        <earliest>-15m</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Ingest by source in Gb / Day</title>
+      <table>
+        <search>
+          <query>index="_internal" host=* source="*/metrics.log" group=per_sourcetype_thruput
+| eval gb=kb/1024/1024
+| stats sum(gb) AS total_gb, sum(ev) AS total_events by series
+| sort - total_gb</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Ingest Total Gb / Day</title>
+      <table>
+        <search>
+          <query>index="_internal" host=* source="*/metrics.log" group=per_sourcetype_thruput
+| eval gb=kb/1024/1024
+| stats sum(gb) AS total_gb</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Gb / Day Size by host</title>
+      <table>
+        <search>
+          <query>index=_internal source=*license_usage.log TERM(type=Usage) earliest=-7d@d latest=@d
+| fields idx, b, st, h, _time, date_wday
+| eval h=if(len(h)=0 OR isnull(h),'(SQUASHED)',h)
+| bin _time span=1d
+| stats sum(b) AS b, dc(h) AS h by st idx _time
+| stats avg(b) as avg_b, avg(h) AS Host_Count_per_Day by idx st
+| eval Avg_MB_per_Day=round(avg_b/1024/1024,2)
+| eval Avg_GB_per_Day=round(avg_b/1024/1024/1024,2)
+| eval Avg_MB_per_Host=round(Avg_MB_per_Day/Host_Count_per_Day,2)
+| eval Host_Count_per_Day=round(Host_Count_per_Day,0)
+| rename st AS Sourcetype
+| join type=left Sourcetype [
+| rest /services/saved/sourcetypes
+| rename title AS Sourcetype, eai:acl.app as app
+| table Sourcetype, app
+]
+| table idx, app, Sourcetype, Avg_MB_per_Day, Avg_GB_per_Day, Host_Count_per_Day, Avg_MB_per_Host
+| sort -Avg_MB_per_Da</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Long running searches</title>
+      <table>
+        <search>
+          <query>(host=sh*.*splunk*.* OR host=si*.*splunk*.*) index=_audit action=search sourcetype=audittrail 
+| eval user = if(user="n/a", null(), user) 
+| eval search_type = case( match(search_id, "^SummaryDirector_"), "summarization", match(savedsearch_name, "^_ACCELERATE_"), "acceleration", match(search_id, "^((rt_)?scheduler_|alertsmanager_)"), "scheduled", match(search_id, "\d{10}\.\d+(_[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})?$$"), "ad hoc", savedsearch_name="","ad hoc", true(), "other") 
+| eval search_type=case( match(savedsearch_name,"search\d"),"dashboard", match(search_id,"rt_*"),"realtime", match(search_id,"subsearch_*"),"subsearch", true(),search_type) 
+| eval search=if(isnull(savedsearch_name) OR savedsearch_name=="", search, savedsearch_name) 
+| stats min(_time) as _time, values(user) as user, max(total_run_time) as total_run_time, first(search) as search, first(search_type) as search_type, first(search_et) as search_et, first(search_lt) as search_lt, first(api_et) as api_et, first(api_lt) as api_lt by search_id, host 
+| where search_type=="ad hoc" AND isnotnull(search) AND isnotnull(user) 
+| eval api_et = if(api_et="N/A", search_et, api_et) 
+| eval api_lt = if(api_lt="N/A", search_lt, api_lt) 
+| eval earliest=if(api_et="N/A", "AllTime", strftime(api_et, "%Y-%d-%m %H:%M:%S")) 
+| eval latest=if(api_lt="N/A", "AllTime", strftime(api_lt, "%Y-%d-%m %H:%M:%S")) 
+| eval _time = strftime(_time, "%m/%d/%Y %H:%M:%S %z") 
+| stats max(total_run_time) as total_run_time by search, search_type, user, host, search_id 
+| search total_run_time &gt; 1800 
+| sort - total_run_time 
+| stats count as Searches</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <search>
+          <query>(host=sh*.*splunk*.* OR host=si*.*splunk*.*) NOT user IN(cmon_user,internal_observability) index=_audit action=search sourcetype=audittrail 
+| eval user = if(user="n/a", null(), user) 
+| eval search_type = case( match(search_id, "^SummaryDirector_"), "summarization", match(savedsearch_name, "^_ACCELERATE_"), "acceleration", match(search_id, "^((rt_)?scheduler_|alertsmanager_)"), "scheduled", match(search_id, "\d{10}\.\d+(_[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})?$$"), "ad hoc", savedsearch_name="","ad hoc", true(), "other") 
+| eval search_type=case( match(savedsearch_name,"search\d"),"dashboard", match(search_id,"rt_*"),"realtime", match(search_id,"subsearch_*"),"subsearch", true(),search_type) 
+| eval search=if(isnull(savedsearch_name) OR savedsearch_name=="", search, savedsearch_name) 
+| stats sum(total_run_time) as total_run_time 
+| rename total_run_time as "Search Runtime" 
+| stats sum("Search Runtime") as sum 
+| eval "TotalSearchRuntime" = case( round('sum' / (3600*24) - 0.5) &gt; 0, round('sum' / (3600*24) - 0.5)."d ".round(('sum' % (3600*24)) / 3600 - 0.5)."h ".round(('sum' % 3600) / 60 - 0.5)."min ".round('sum' % 60, 2)."s", round(('sum' % (3600*24)) / 3600 - 0.5) &gt; 0, round(('sum' % (3600*24)) / 3600 - 0.5)."h ".round(('sum' % 3600) / 60 - 0.5)."min ".round('sum' % 60, 2)."s", round(('sum' % 3600) / 60 - 0.5) &gt; 0, round(('sum' % 3600) / 60 - 0.5)."min ".round('sum' % 60, 2)."s", 1 = 1, round('sum' % 60, 2)."s" ) 
+| table TotalSearchRuntime 
+| eval TotalSearchRuntime=substr(TotalSearchRuntime,1,09)</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Search by type</title>
+      <chart>
+        <search>
+          <query>(host=sh*.*splunk*.* OR host=si*.*splunk*.*) index=_audit action=search sourcetype=audittrail | eval user = if(user="n/a", null(), user) | eval search_type = case( match(search_id, "^SummaryDirector_"), "summarization", match(savedsearch_name, "^_ACCELERATE_"), "acceleration", match(search_id, "^((rt_)?scheduler_|alertsmanager_)"), "scheduled", match(search_id, "d{10}.d+(_[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})?$$"), "ad hoc", savedsearch_name="","ad hoc", true(), "other") | eval search_type=case( match(savedsearch_name,"searchd"),"dashboard", match(search_id,"rt_*"),"realtime", match(search_id,"subsearch_*"),"subsearch", true(),search_type) | eval search=if(isnull(savedsearch_name) OR savedsearch_name=="", search, savedsearch_name) | timechart count by search_type</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Sourcetypes available by Index</title>
+      <table>
+        <search>
+          <query>| tstats values(sourcetype) where index=* by index
+| rename index AS "Index", values(sourcetype) AS "Source Types"</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Most recent received sourcetype in this Environment</title>
+      <table>
+        <search>
+          <query>| tstats latest(_time) as latesttime where index=* by sourcetype
+| eval fixedtime = strftime(latesttime,"%c")
+| table sourcetype, fixedtime
+| rename sourcetype AS "Source Type", fixedtime AS "Time (Last Event Received)"</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>ES Your Correlation Searches [Completed]</title>
+      <table>
+        <search>
+          <query>index=_audit host=* sourcetype=audittrail action=search info=completed savedsearch_name="*Rule"
+| stats dc(savedsearch_name) as correlation_search_count</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>ES Built-in saved search load</title>
+      <table>
+        <search>
+          <query>index=_audit host=* sourcetype=audittrail action=search info=completed savedsearch_name!=*_ACCELERATE_* savedsearch_name!="" savedsearch_name!="*Rule" savedsearch_id="*SplunkEnterpriseSecuritySuite*"
+| stats dc(savedsearch_name) as built_in_saved_search_count</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>ES Other saved searches</title>
+      <table>
+        <search>
+          <query>index=_audit host=* sourcetype=audittrail action=search info=completed savedsearch_name!=*_ACCELERATE_* savedsearch_name!="" savedsearch_name!="*Rule" savedsearch_id!="*SplunkEnterpriseSecuritySuite*"
+| stats dc(savedsearch_name) as user_defined_saved_search_count</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Splunk Core Search workload (non-ES search head(s))</title>
+      <table>
+        <search>
+          <query>index=_audit host=* action=search sourcetype=audittrail search_id!="*rsa_*" search_id!="*subsearch*"
+| stats dc(search_id) as "Daily Search Count"</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>ES Ad-hoc search load</title>
+      <table>
+        <search>
+          <query>index=_audit host=* sourcetype=audittrail action=search info=completed savedsearch_name="" search_id!="*_scheduler_*" search_id!="*_summarize_*" search_id!="*SummaryDirector*" search_id!='subsearch_*'
+| stats count as ad_hoc_search</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Usage by index granular view</title>
+      <chart>
+        <search>
+          <query>| tstats count GroupBy host sourcetype index _time span=1d 
+| eval entity = host . "/" . sourcetype . "/" . index 
+| timechart span=1d sum(count) BY entity</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>EPS [Useful for UBA sizing or others]</title>
+      <table>
+        <search>
+          <query>| tstats count as eps where index=* groupby index, sourcetype _time span=1s | stats count as NumSeconds max(eps) perc99(eps) perc90(eps) avg(eps) as avg_eps by index, sourcetype | addinfo | eval PercentageOfTimeWithData = NumSeconds / (info_max_time - info_min_time)  | fields - NumSeconds info | eval EffectiveAverage = avg_eps * PercentageOfTimeWithData | fieldformat PercentageOfTimeWithData = round(PercentageOfTimeWithData*100,2)</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Daily license usage by sourcetype using the metrics throughput log over 30 days</title>
+      <table>
+        <search>
+          <query>index=_internal earliest=@day-30days latest=@day
+source=*metrics.log splunk_server="*" group="per_sourcetype_thruput" series!="stash"
+| bin _time span=1d
+| stats sum(kb) AS kb,sum(ev) AS events by series,_time
+| stats avg(kb) AS kb,avg(events) AS Events by series
+| rename series as sourcetype
+| eval MB=round(kb/1024,2)
+| sort MB
+| join sourcetype 
+    [| tstats count WHERE earliest=@day-30days latest=@day index=* AND index!="_*" GROUPBY sourcetype,host _time span=1d
+    | stats dc(host) as Hosts by sourcetype,_time
+    | stats avg(Hosts) as Hosts by sourcetype
+| eval sourcetype=lower(sourcetype), Hosts=round(Hosts,0)
+    ]
+| addcoltotals 
+| fillnull value="[ Total Indexed Volume ] per 24 Hours" sourcetype
+| eval MBPerHost=round(MB/Hosts,0)
+| eval EPS=round(Events/(24*60*60),1)
+| eval MessageSize=round(kb*1024/Events,0)
+| fields - kb</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+</form>
