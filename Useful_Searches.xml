@@ -23,28 +23,38 @@
           <sampleRatio>1</sampleRatio>
         </search>
         <option name="count">20</option>
-        <option name="dataOverlayMode">none</option>
+        <option name="dataOverlayMode">highlow</option>
         <option name="drilldown">none</option>
         <option name="percentagesRow">false</option>
-        <option name="refresh.display">progressbar</option>
         <option name="rowNumbers">false</option>
         <option name="totalsRow">false</option>
         <option name="wrap">true</option>
       </table>
     </panel>
     <panel>
-      <title>Ingest Total Gb / Day</title>
+      <title>Data Size by index [DSA]</title>
       <table>
         <search>
-          <query>index="_internal" host=* source="*/metrics.log" group=per_sourcetype_thruput
-| eval gb=kb/1024/1024
-| stats sum(gb) AS total_gb</query>
+          <query>index=_internal source=*license_usage.log TERM(type=Usage) earliest=-60d@d latest=@d 
+| fields idx, b, st, h, _time, date_wday 
+| eval h=if(len(h)=0 OR isnull(h),'(SQUASHED)',h) 
+| bin _time span=1d 
+| stats sum(b) AS b, dc(h) AS h by st idx date_wday 
+| stats avg(b) as avg_b, avg(h) AS Host_Count_per_Day by idx st 
+| eval Avg_MB_per_Day=round(avg_b/1024/1024,2) 
+| eval Avg_GB_per_Day=round(avg_b/1024/1024/1024,2) 
+| eval Avg_MB_per_Host=round(Avg_MB_per_Day/Host_Count_per_Day,2) 
+| eval Host_Count_per_Day=round(Host_Count_per_Day,0) 
+| rename st AS Sourcetype 
+| table idx, Sourcetype, Avg_MB_per_Day, Avg_GB_per_Day, Host_Count_per_Day, Avg_MB_per_Host 
+| sort Sourcetype 
+| addcoltotals</query>
           <earliest>$time1.earliest$</earliest>
           <latest>$time1.latest$</latest>
           <sampleRatio>1</sampleRatio>
         </search>
         <option name="count">20</option>
-        <option name="dataOverlayMode">none</option>
+        <option name="dataOverlayMode">highlow</option>
         <option name="drilldown">none</option>
         <option name="percentagesRow">false</option>
         <option name="refresh.display">progressbar</option>
@@ -53,6 +63,8 @@
         <option name="wrap">true</option>
       </table>
     </panel>
+  </row>
+  <row>
     <panel>
       <title>Gb / Day Size by host</title>
       <table>
@@ -75,6 +87,27 @@
 ]
 | table idx, app, Sourcetype, Avg_MB_per_Day, Avg_GB_per_Day, Host_Count_per_Day, Avg_MB_per_Host
 | sort -Avg_MB_per_Da</query>
+          <earliest>$time1.earliest$</earliest>
+          <latest>$time1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Ingest Total Gb / Day</title>
+      <table>
+        <search>
+          <query>index="_internal" host=* source="*/metrics.log" group=per_sourcetype_thruput
+| eval gb=kb/1024/1024
+| stats sum(gb) AS total_gb</query>
           <earliest>$time1.earliest$</earliest>
           <latest>$time1.latest$</latest>
           <sampleRatio>1</sampleRatio>
@@ -447,6 +480,26 @@ source=*metrics.log splunk_server="*" group="per_sourcetype_thruput" series!="st
         <option name="drilldown">none</option>
         <option name="percentagesRow">false</option>
         <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Usage performance CPU Count and other Details</title>
+      <table>
+        <search>
+          <query>index=_introspection
+| stats  values(data.search_props.role) as Process_Role values(data.cpu_count) as "Physical Cores" values(data.virtual_cpu_count) as "Virtual Cores" values(data.mem) as "Memory" values(data.mount_point) as mount_point latest(data.capacity) as capacity latest(data.free) as free latest(data.reads_ps) as IOReads latest(data.writes_ps) as IOWrites values(data.process) as Process values(data.process_type) as Process_Type by host</query>
+          <earliest>0</earliest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
         <option name="rowNumbers">false</option>
         <option name="totalsRow">false</option>
         <option name="wrap">true</option>
